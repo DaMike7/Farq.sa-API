@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
@@ -6,6 +7,9 @@ from app.core.config import settings
 from app.core.database import engine, Base
 from app.api.v1.router import api_router
 
+from app.models.user import User
+from app.models.restaurant import Restaurant
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
@@ -13,9 +17,21 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-async def create_tables():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Starting up Farq API...")
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database tables ensured.")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}")
+        raise
+
+    yield
+
+    logger.info("Shutting down Farq API...")
+    await engine.dispose()
 
 app = FastAPI(
     title="Farq API",
@@ -24,6 +40,7 @@ app = FastAPI(
     openapi_url="/openapi.json",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -35,17 +52,6 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix="/api/v1")
-
-@app.on_event("startup")
-async def startup_event():
-    logger.info("Starting up Farq API...")
-    await create_tables()
-    logger.info("Database tables ensured.")
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    logger.info("Shutting down Farq API...")
-    await engine.dispose()
 
 @app.get("/")
 async def root():

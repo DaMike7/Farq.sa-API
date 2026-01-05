@@ -7,17 +7,18 @@ from app.core.security import decode_access_token
 from app.models.user import User
 from app.schemas.auth import TokenData
 from app.services.cache_service import CacheService
+from typing import AsyncGenerator
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
-async def get_db() -> AsyncSession:
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         try:
             yield session
         finally:
             await session.close()
 
-async def get_cache() -> CacheService:
+async def get_cache() -> AsyncGenerator[CacheService, None]:
     cache = CacheService()
     try:
         yield cache
