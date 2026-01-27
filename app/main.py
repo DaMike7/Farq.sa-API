@@ -2,11 +2,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
-
+from sqlalchemy import text  # ADD THIS LINE
 from app.core.config import settings
 from app.core.database import engine, Base
 from app.api.v1.router import api_router
-
 from app.models.user import User
 from app.models.restaurant import Restaurant
 
@@ -14,7 +13,6 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
 )
-
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager
@@ -22,14 +20,19 @@ async def lifespan(app: FastAPI):
     logger.info("Starting up Farq API...")
     try:
         async with engine.begin() as conn:
+            # Enable PostGIS extension FIRST
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
+            logger.info("PostGIS extension enabled")
+            
+            # Then create tables
             await conn.run_sync(Base.metadata.create_all)
-        logger.info("Database tables ensured.")
+            logger.info("Database tables ensured.")
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
         raise
-
+    
     yield
-
+    
     logger.info("Shutting down Farq API...")
     await engine.dispose()
 
