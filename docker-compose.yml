@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   db:
     image: postgis/postgis:16-3.4
@@ -16,6 +18,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - farq_net
 
   redis:
     image: redis:7-alpine
@@ -30,6 +34,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - farq_net
 
   api:
     build: .
@@ -37,6 +43,10 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
     depends_on:
       db:
         condition: service_healthy
@@ -44,7 +54,11 @@ services:
         condition: service_healthy
     ports:
       - "8000:8000"
+    volumes:
+      - ./uploads:/app/uploads
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+    networks:
+      - farq_net
 
   worker:
     build: .
@@ -52,13 +66,25 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - ./uploads:/app/uploads
     command: celery -A celery_worker.worker.celery_app worker --loglevel=info --pool=solo
+    networks:
+      - farq_net
 
 volumes:
   postgres_data:
   redis_data:
+
+networks:
+  farq_net:
+    driver: bridge
